@@ -11,6 +11,33 @@ interface Video {
   published_at: string | undefined
 }
 
+function formatDuration(duration: string | undefined): string {
+  if (!duration) return ''
+  const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/)
+  if (!match) return duration
+  
+  const hours = (match[1] || '').replace('H', '')
+  const minutes = (match[2] || '').replace('M', '')
+  const seconds = (match[3] || '').replace('S', '')
+  
+  return [
+    hours && `${hours}:`,
+    minutes.padStart(2, '0'),
+    ':',
+    seconds.padStart(2, '0')
+  ].join('')
+}
+
+// Add a helper function to safely format dates
+function formatDate(dateString: string | undefined): string {
+  if (!dateString) return 'N/A'
+  try {
+    return new Date(dateString).toLocaleDateString()
+  } catch {
+    return 'Invalid Date'
+  }
+}
+
 export default function Home() {
   const [url, setUrl] = useState('')
   const [videoLimit, setVideoLimit] = useState(100)
@@ -39,8 +66,12 @@ export default function Home() {
       }
 
       setVideos(data.videos)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('An unknown error occurred')
+      }
     } finally {
       setLoading(false)
     }
@@ -130,7 +161,7 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {videos.map((video: any, index) => (
+                    {videos.map((video: Video, index) => (
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <a 
@@ -142,12 +173,12 @@ export default function Home() {
                             {video.title}
                           </a>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">{video.duration}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">{formatDuration(video.duration)}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {video.views.toLocaleString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {new Date(video.published_at).toLocaleDateString()}
+                          {formatDate(video.published_at)}
                         </td>
                       </tr>
                     ))}

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { google } from 'googleapis'
+import { google, youtube_v3 } from 'googleapis'
 
 // Add type checking for environment variable
 if (!process.env.YOUTUBE_API_KEY) {
@@ -13,6 +13,39 @@ interface Video {
   duration: string | undefined
   views: number
   published_at: string | undefined
+}
+
+// Add interfaces for YouTube API responses
+interface PlaylistItem {
+  snippet?: {
+    title?: string
+    publishedAt?: string
+  }
+  contentDetails?: {
+    videoId?: string
+  }
+}
+
+interface VideoDetails {
+  contentDetails?: {
+    duration?: string | null
+  }
+  statistics?: {
+    viewCount?: string
+  }
+}
+
+interface ApiResponse {
+  videos: Video[]
+  error?: string
+}
+
+// Update the PlaylistResponse interface to match the YouTube API response type
+interface PlaylistResponse {
+  data: {
+    items?: youtube_v3.Schema$PlaylistItem[]
+    nextPageToken?: string | null
+  }
 }
 
 export async function POST(request: Request) {
@@ -78,15 +111,15 @@ export async function POST(request: Request) {
     let pageToken: string | undefined = undefined
 
     while (videos.length < videoLimit) {
-      const playlistResponse = await youtube.playlistItems.list({
+      const playlistResponse: youtube_v3.Schema$PlaylistItemListResponse = await youtube.playlistItems.list({
         part: ['snippet', 'contentDetails'],
         playlistId: uploadsPlaylistId,
         maxResults: Math.min(50, videoLimit - videos.length),
         pageToken
       })
 
-      const videoIds = playlistResponse.data.items?.map(
-        item => item.contentDetails?.videoId
+      const videoIds = playlistResponse.items?.map(
+        (item) => item.contentDetails?.videoId
       ) || []
 
       // Get video details
@@ -96,21 +129,21 @@ export async function POST(request: Request) {
           id: videoIds
         })
 
-        playlistResponse.data.items?.forEach((item, index) => {
-          const details = videoDetails.data.items?.[index]
+        playlistResponse.items?.forEach((item: youtube_v3.Schema$PlaylistItem, index: number) => {
+          const details = videoDetails.data.items?.[index] as VideoDetails | undefined
           if (details) {
             videos.push({
-              title: item.snippet?.title,
+              title: item.snippet?.title || undefined,
               url: `https://youtube.com/watch?v=${item.contentDetails?.videoId}`,
-              duration: details.contentDetails?.duration,
+              duration: details.contentDetails?.duration || undefined,
               views: parseInt(details.statistics?.viewCount || '0'),
-              published_at: item.snippet?.publishedAt
+              published_at: item.snippet?.publishedAt || undefined
             })
           }
         })
       }
 
-      pageToken = playlistResponse.data.nextPageToken
+      pageToken = playlistResponse.nextPageToken || undefined
       if (!pageToken || videos.length >= videoLimit) break
     }
 

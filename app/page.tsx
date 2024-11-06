@@ -121,12 +121,15 @@ export default function Home() {
     setVideos([])
 
     try {
-      const response = await fetch('/api/scrape', {
+      const response = await fetch('/api', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url, videoLimit }),
+        body: JSON.stringify({
+          url,
+          videoLimit,
+        }),
       })
 
       const data = await response.json()

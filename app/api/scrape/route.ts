@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { google, youtube_v3 } from 'googleapis'
-import { rateLimit } from '@/lib/rate-limit'
+import { rateLimit } from '../../lib/rate-limit'
 
 // Add type checking for environment variable
 if (!process.env.YOUTUBE_API_KEY) {
@@ -121,11 +121,10 @@ export async function POST(request: Request) {
         pageToken
       })
 
-      const playlistData = playlistResponse.data;
-
-      const videoIds = playlistData.items?.map(
-        (item: youtube_v3.Schema$PlaylistItem) => item.contentDetails?.videoId
-      ) || []
+      // Filter out null and undefined values from videoIds
+      const videoIds = playlistResponse.data.items?.map(
+        item => item.contentDetails?.videoId
+      ).filter((id): id is string => id !== null && id !== undefined) || []
 
       // Get video details
       if (videoIds.length) {
@@ -134,8 +133,8 @@ export async function POST(request: Request) {
           id: videoIds
         })
 
-        playlistData.items?.forEach((item: youtube_v3.Schema$PlaylistItem, index: number) => {
-          const details = videoDetails.data.items?.[index] as VideoDetails | undefined
+        playlistResponse.data.items?.forEach((item, index) => {
+          const details = videoDetails.data.items?.[index]
           if (details) {
             videos.push({
               title: item.snippet?.title || undefined,
@@ -148,7 +147,7 @@ export async function POST(request: Request) {
         })
       }
 
-      pageToken = playlistData.nextPageToken || undefined
+      pageToken = playlistResponse.data.nextPageToken || undefined
       if (!pageToken || videos.length >= videoLimit) break
     }
 

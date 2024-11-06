@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-// Add type for video
+// Add type for video and sort options
 interface Video {
   title: string | undefined
   url: string
@@ -10,6 +10,9 @@ interface Video {
   views: number
   published_at: string | undefined
 }
+
+type SortField = 'published_at' | 'views' | 'duration'
+type SortOrder = 'asc' | 'desc'
 
 function formatDuration(duration: string | undefined): string {
   if (!duration) return ''
@@ -28,7 +31,20 @@ function formatDuration(duration: string | undefined): string {
   ].join('')
 }
 
-// Add a helper function to safely format dates
+// Add duration to seconds converter for sorting
+function durationToSeconds(duration: string | undefined): number {
+  if (!duration) return 0
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  if (!match) return 0
+  
+  const [_, hours, minutes, seconds] = match
+  return (
+    (parseInt(hours || '0') * 3600) +
+    (parseInt(minutes || '0') * 60) +
+    parseInt(seconds || '0')
+  )
+}
+
 function formatDate(dateString: string | undefined): string {
   if (!dateString) return 'N/A'
   try {
@@ -38,12 +54,65 @@ function formatDate(dateString: string | undefined): string {
   }
 }
 
+// Add CSV export function
+function exportToCSV(videos: Video[]) {
+  const headers = ['Title', 'URL', 'Duration', 'Views', 'Published Date']
+  const csvContent = [
+    headers.join(','),
+    ...videos.map(video => [
+      `"${video.title?.replace(/"/g, '""')}"`,
+      video.url,
+      formatDuration(video.duration),
+      video.views,
+      formatDate(video.published_at)
+    ].join(','))
+  ].join('\n')
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = 'youtube_videos.csv'
+  link.click()
+}
+
 export default function Home() {
   const [url, setUrl] = useState('')
   const [videoLimit, setVideoLimit] = useState(100)
   const [loading, setLoading] = useState(false)
   const [videos, setVideos] = useState<Video[]>([])
   const [error, setError] = useState('')
+  const [sortField, setSortField] = useState<SortField>('published_at')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+
+  // Add sort function
+  const sortVideos = (videos: Video[]): Video[] => {
+    return [...videos].sort((a, b) => {
+      let comparison = 0
+      
+      switch (sortField) {
+        case 'published_at':
+          comparison = (new Date(a.published_at || 0)).getTime() - (new Date(b.published_at || 0)).getTime()
+          break
+        case 'views':
+          comparison = a.views - b.views
+          break
+        case 'duration':
+          comparison = durationToSeconds(a.duration) - durationToSeconds(b.duration)
+          break
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+  }
+
+  const handleSort = (field: SortField) => {
+    if (field === sortField) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortOrder('desc')
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -76,6 +145,8 @@ export default function Home() {
       setLoading(false)
     }
   }
+
+  const sortedVideos = sortVideos(videos)
 
   return (
     <main className="py-10">
@@ -141,7 +212,15 @@ export default function Home() {
 
           {videos.length > 0 && (
             <div className="mt-8">
-              <h2 className="text-xl font-semibold mb-4">Found {videos.length} Videos</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">Found {videos.length} Videos</h2>
+                <button
+                  onClick={() => exportToCSV(sortedVideos)}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Export to CSV
+                </button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -149,19 +228,28 @@ export default function Home() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Title
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Duration
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => handleSort('duration')}
+                      >
+                        Duration {sortField === 'duration' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Views
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => handleSort('views')}
+                      >
+                        Views {sortField === 'views' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Published
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => handleSort('published_at')}
+                      >
+                        Published {sortField === 'published_at' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {videos.map((video: Video, index) => (
+                    {sortedVideos.map((video: Video, index) => (
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <a 

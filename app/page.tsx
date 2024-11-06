@@ -121,7 +121,7 @@ export default function Home() {
     setVideos([])
 
     try {
-      const response = await fetch('/api', {
+      const response = await fetch('/api/scrape', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

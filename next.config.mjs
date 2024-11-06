@@ -4,14 +4,6 @@ const nextConfig = {
   swcMinify: true,
   experimental: {
     serverActions: true
-  },
-  async rewrites() {
-    return [
-      {
-        source: '/api',
-        destination: '/api',
-      },
-    ]
   }
 }
 

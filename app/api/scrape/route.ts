@@ -114,17 +114,16 @@ export async function POST(request: Request) {
     let pageToken: string | undefined = undefined
 
     while (videos.length < videoLimit) {
-      const playlistResponse = await youtube.playlistItems.list({
+      const playlistResponse: youtube_v3.Schema$PlaylistItemListResponse = await youtube.playlistItems.list({
         part: ['snippet', 'contentDetails'],
         playlistId: uploadsPlaylistId,
         maxResults: Math.min(50, videoLimit - videos.length),
         pageToken
       })
 
-      // Filter out null and undefined values from videoIds
-      const videoIds = playlistResponse.data.items?.map(
-        item => item.contentDetails?.videoId
-      ).filter((id): id is string => id !== null && id !== undefined) || []
+      const videoIds = playlistResponse.items?.map(
+        (item: youtube_v3.Schema$PlaylistItem) => item.contentDetails?.videoId
+      ).filter((id: string | null | undefined): id is string => id !== null && id !== undefined) || []
 
       // Get video details
       if (videoIds.length) {
@@ -133,7 +132,7 @@ export async function POST(request: Request) {
           id: videoIds
         })
 
-        playlistResponse.data.items?.forEach((item, index) => {
+        playlistResponse.items?.forEach((item: youtube_v3.Schema$PlaylistItem, index: number) => {
           const details = videoDetails.data.items?.[index]
           if (details) {
             videos.push({
@@ -147,7 +146,7 @@ export async function POST(request: Request) {
         })
       }
 
-      pageToken = playlistResponse.data.nextPageToken || undefined
+      pageToken = playlistResponse.nextPageToken || undefined
       if (!pageToken || videos.length >= videoLimit) break
     }
 

@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { google, youtube_v3 } from 'googleapis'
 import { rateLimit } from '@/app/lib/rate-limit'
 import { Video } from '@/app/types/video'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+export const maxDuration = 300
 
 const isValidYouTubeUrl = (url: string): boolean => {
   try {
@@ -12,7 +16,7 @@ const isValidYouTubeUrl = (url: string): boolean => {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     if (!process.env.YOUTUBE_API_KEY) {
       return NextResponse.json(

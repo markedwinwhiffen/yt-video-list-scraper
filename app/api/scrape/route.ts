@@ -1,32 +1,8 @@
 import { NextResponse } from 'next/server'
 import { google, youtube_v3 } from 'googleapis'
-import { rateLimit } from '../../lib/rate-limit'
+import { rateLimit } from '@/app/lib/rate-limit'
+import { Video } from '@/app/types/video'
 
-// Add type checking for environment variable
-if (!process.env.YOUTUBE_API_KEY) {
-  throw new Error('YOUTUBE_API_KEY is not configured')
-}
-
-// Add interface for video type
-interface Video {
-  title: string | undefined
-  url: string
-  duration: string | undefined
-  views: number
-  published_at: string | undefined
-}
-
-// Add interfaces for YouTube API responses
-interface VideoDetails {
-  contentDetails?: {
-    duration?: string | null
-  }
-  statistics?: {
-    viewCount?: string
-  }
-}
-
-// Improve URL validation
 const isValidYouTubeUrl = (url: string): boolean => {
   try {
     const urlObj = new URL(url)
@@ -38,12 +14,19 @@ const isValidYouTubeUrl = (url: string): boolean => {
 
 export async function POST(request: Request) {
   try {
+    if (!process.env.YOUTUBE_API_KEY) {
+      return NextResponse.json(
+        { error: 'API configuration error' },
+        { status: 500 }
+      )
+    }
+
     const limiter = rateLimit({
-      interval: 60 * 1000, // 1 minute
+      interval: 60 * 1000,
       uniqueTokenPerInterval: 500
     })
 
-    await limiter.check(5, 'YOUTUBE_API') // 5 requests per minute
+    await limiter.check(5, 'YOUTUBE_API')
 
     const { url, videoLimit = 100 } = await request.json()
 
@@ -54,7 +37,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Improve URL validation
     if (!isValidYouTubeUrl(url)) {
       return NextResponse.json(
         { error: 'Invalid YouTube URL' },
@@ -62,7 +44,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Extract channel handle from URL
     const channelHandle = url.split('@')[1]?.split('/')[0]
     if (!channelHandle) {
       return NextResponse.json(
@@ -71,13 +52,11 @@ export async function POST(request: Request) {
       )
     }
 
-    // Initialize YouTube API
     const youtube = google.youtube({
       version: 'v3',
       auth: process.env.YOUTUBE_API_KEY
     })
 
-    // Get channel ID from handle
     const channelResponse = await youtube.search.list({
       part: ['snippet'],
       q: channelHandle,
@@ -94,7 +73,6 @@ export async function POST(request: Request) {
 
     const channelId = channelResponse.data.items[0].id?.channelId
 
-    // Get uploads playlist ID
     const channelDetails = await youtube.channels.list({
       part: ['contentDetails'],
       id: [channelId!]
@@ -109,7 +87,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get videos from uploads playlist
     const videos: Video[] = []
     let pageToken: string | undefined = undefined
 
@@ -127,7 +104,6 @@ export async function POST(request: Request) {
         (item: youtube_v3.Schema$PlaylistItem) => item.contentDetails?.videoId
       ).filter((id: string | undefined | null): id is string => id !== null && id !== undefined) || []
 
-      // Get video details
       if (videoIds.length) {
         const videoDetails = await youtube.videos.list({
           part: ['contentDetails', 'statistics'],

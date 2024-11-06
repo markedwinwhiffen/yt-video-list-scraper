@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { google, youtube_v3 } from 'googleapis'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Add type checking for environment variable
 if (!process.env.YOUTUBE_API_KEY) {
@@ -16,16 +17,6 @@ interface Video {
 }
 
 // Add interfaces for YouTube API responses
-interface PlaylistItem {
-  snippet?: {
-    title?: string
-    publishedAt?: string
-  }
-  contentDetails?: {
-    videoId?: string
-  }
-}
-
 interface VideoDetails {
   contentDetails?: {
     duration?: string | null
@@ -35,26 +26,38 @@ interface VideoDetails {
   }
 }
 
-interface ApiResponse {
-  videos: Video[]
-  error?: string
-}
-
-// Update the PlaylistResponse interface to match the YouTube API response type
-interface PlaylistResponse {
-  data: {
-    items?: youtube_v3.Schema$PlaylistItem[]
-    nextPageToken?: string | null
+// Improve URL validation
+const isValidYouTubeUrl = (url: string): boolean => {
+  try {
+    const urlObj = new URL(url)
+    return urlObj.hostname === 'youtube.com' || urlObj.hostname === 'www.youtube.com'
+  } catch {
+    return false
   }
 }
 
 export async function POST(request: Request) {
   try {
+    const limiter = rateLimit({
+      interval: 60 * 1000, // 1 minute
+      uniqueTokenPerInterval: 500
+    })
+
+    await limiter.check(5, 'YOUTUBE_API') // 5 requests per minute
+
     const { url, videoLimit = 100 } = await request.json()
 
     if (!url) {
       return NextResponse.json(
         { error: 'URL is required' },
+        { status: 400 }
+      )
+    }
+
+    // Improve URL validation
+    if (!isValidYouTubeUrl(url)) {
+      return NextResponse.json(
+        { error: 'Invalid YouTube URL' },
         { status: 400 }
       )
     }
@@ -111,15 +114,17 @@ export async function POST(request: Request) {
     let pageToken: string | undefined = undefined
 
     while (videos.length < videoLimit) {
-      const playlistResponse: youtube_v3.Schema$PlaylistItemListResponse = await youtube.playlistItems.list({
+      const playlistResponse = await youtube.playlistItems.list({
         part: ['snippet', 'contentDetails'],
         playlistId: uploadsPlaylistId,
         maxResults: Math.min(50, videoLimit - videos.length),
         pageToken
       })
 
-      const videoIds = playlistResponse.items?.map(
-        (item) => item.contentDetails?.videoId
+      const playlistData = playlistResponse.data;
+
+      const videoIds = playlistData.items?.map(
+        (item: youtube_v3.Schema$PlaylistItem) => item.contentDetails?.videoId
       ) || []
 
       // Get video details
@@ -129,7 +134,7 @@ export async function POST(request: Request) {
           id: videoIds
         })
 
-        playlistResponse.items?.forEach((item: youtube_v3.Schema$PlaylistItem, index: number) => {
+        playlistData.items?.forEach((item: youtube_v3.Schema$PlaylistItem, index: number) => {
           const details = videoDetails.data.items?.[index] as VideoDetails | undefined
           if (details) {
             videos.push({
@@ -143,16 +148,17 @@ export async function POST(request: Request) {
         })
       }
 
-      pageToken = playlistResponse.nextPageToken || undefined
+      pageToken = playlistData.nextPageToken || undefined
       if (!pageToken || videos.length >= videoLimit) break
     }
 
     return NextResponse.json({ videos })
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching videos:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch videos'
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch videos' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
